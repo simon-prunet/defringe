@@ -1,8 +1,41 @@
+"""Produce synthetic data based on real CFHT MegaCam images."""
+
 import numpy as np
 from astropy.io import fits
 
 def generate_subimages(im, sub_im_size=(75,75), stride=(10, 10),
                        syms=True, axial_sym=True, diag_sym=True, rots=True):
+    """Generate small, possibly overlapping subimages from one larger image.
+
+    Parameters
+    ----------
+    im : 2d `np.ndarray`
+        The initial image from which subimages are to be extracted.
+    sub_im_size : Sequence, optional
+        The desired subimage dimensions. Defaults to (75, 75).
+    stride : Sequence, optional
+        Desired "stride." If smaller than ``sub_im_size``, subimages will
+        overlap. Defaults to (10, 10).
+    syms : bool, optional
+        Whether symmetries should be applied to each subimage to increase the
+        number of datapoints (ie, a form of "data augmentation"). Defaults to
+        True
+    axial_sym : bool, optional
+        Whether vertical and horizontal axial symmetries should be applied.
+        Ignored if ``syms`` is False.
+    diag_sym : bool, optional
+        Whether diagonal and antidiagonal axial symmetries should be applied.
+        Ignored if ``syms`` is False.
+    rots : bool, optional
+        Whether 90, 180, and -90 degrees rotations should be applied.
+        Ignored if ``syms`` is False.
+
+    Returns
+    -------
+    synth_data : `np.ndarray`
+        Array of shape ``(n_subimages, sub_im_size[0], sub_im_size[1])``
+        containing unique subimages.
+    """
     sub_ims = []
     # leave up to a single stride unused
     orig = np.random.choice(stride[0]), np.random.choice(stride[1])
@@ -27,6 +60,19 @@ def generate_subimages(im, sub_im_size=(75,75), stride=(10, 10),
     return synth_data
 
 def apply_syms(im, axial_sym=True, diag_sym=True, rot=True):
+    """Apply set of specified symmetries to input image.
+
+    Parameters
+    ----------
+    im : 2d `np.ndarray`
+         The image symmetries should be applied to.
+    axial_sym : bool, optional
+        Whether vertical and horizontal axial symmetries should be applied.
+    diag_sym : bool, optional
+        Whether diagonal and antidiagonal axial symmetries should be applied.
+    rots : bool, optional
+        Whether 90, 180, and -90 degrees rotations should be applied.
+    """
     all_ims = []
     if axial_sym:
         all_ims.extend([np.copy(im)[::-1], np.copy(im)[:,::-1]])
@@ -37,12 +83,41 @@ def apply_syms(im, axial_sym=True, diag_sym=True, rot=True):
     return all_ims
 
 def simple_radius(mean_rad=5, sig_rad=5, min_rad=5):
+    """Draw a left-truncated Gaussian realization.
+
+    Parameters
+    ----------
+    mean_rad : float, optional
+        Mean of the distribution. Defaults to 5.
+    sig_rad : float
+        Standard deviation of the distribution. Defaults to 5.
+    min_rad : float
+        Truncation value. All draws lower than this value will be ignored.
+        Defaults to 5.
+    """
     rad = 0
     while rad < min_rad:
         rad = mean_rad + np.random.randn()*sig_rad
     return rad
 
 def simple_mask(im, max_sources=8, radii_distrib=simple_radius, **kwargs):
+    """Quick and dirty function to draw detection masks on synthetic data.
+
+    All masks are circular, with radii drawn from a callable (then converted to
+    int) in units of pixels.
+
+    Parameters
+    ----------
+    im : 2d `np.ndarray`
+         The image a mask should be generated for.
+    max_sources : int, optional
+         Maximum number of sources per image. The number will be drawn from a
+         uniform distribution between 1 and this value. Defaults to 8.
+    radii_distrib : callable, optional
+         Function to draw a single radius realization. Defaults to
+         ``simple_radius``.
+    All extra keyword arguments are passed on to ``radii_distrib``.
+    """
     nsource = np.random.choice(range(1, max_sources))
     mask = np.zeros(im.shape)
     im_x, im_y = im.shape
@@ -61,6 +136,11 @@ def simple_mask(im, max_sources=8, radii_distrib=simple_radius, **kwargs):
     return mask
 
 def draw_coefs(mean0=3e4, sig0=0.5e4, mean1=3.5e3, sig1=0.2e3):
+    """Draw a pair of coefficients following Gaussian distributions.
+
+    The default values are chosen to roughly reproduce the distribution
+    of coefficients measured in Figure 4 of Prunet, 2021.
+    """
     return mean0 + np.random.randn()*sig0, mean1+np.random.randn()*sig1
 
 def generate_synth_data(path_to_modes='./', seed=11,

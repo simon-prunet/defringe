@@ -135,6 +135,14 @@ def simple_mask(im, max_sources=8, radii_distrib=simple_radius, **kwargs):
                     mask[pix_x, pix_y] = 1
     return mask
 
+def simple_seq_len(min_len=30, max_len=100):
+    """Draw a uniform realization for the length of the sequence of
+    observations.
+    """
+    if min_len == max_len:
+        return min_len
+    return np.random.choice(range(min_len, max_len+1))
+
 def draw_coefs(mean0=3e4, sig0=0.5e4, mean1=3.5e3, sig1=0.2e3):
     """Draw a pair of coefficients following Gaussian distributions.
 
@@ -144,7 +152,7 @@ def draw_coefs(mean0=3e4, sig0=0.5e4, mean1=3.5e3, sig1=0.2e3):
     return mean0 + np.random.randn()*sig0, mean1+np.random.randn()*sig1
 
 def generate_synth_data(path_to_modes='./', seed=11,
-                        base_image_mean=11):
+                        base_image_mean=11, n_seq=100, seq_len=simple_seq_len):
     np.random.seed(seed)
     # load modes for the full image
     mode0 = fits.open(path_to_modes + 'mode0.fits')[0].data
@@ -152,14 +160,25 @@ def generate_synth_data(path_to_modes='./', seed=11,
     # generate sub images for each
     subims_mode0 = generate_subimages(mode0)
     subims_mode1 = generate_subimages(mode1)
+    # draw modes for each sequence
+    idx_mode0 = np.random.choice(subims_mode0.shape[0], n_seq, replace=False)
+    sel_mode0 = np.array([subims_mode0[j] for j in idx_mode0])
+    idx_mode1 = np.random.choice(subims_mode1.shape[0], n_seq, replace=False)
+    sel_mode1 = np.array([subims_mode1[j] for j in idx_mode1])
     # generate "ground truth" images
-    base_datacube_shape = subims_mode0.shape
+    seq_lens = [seq_len() for _ in range(n_seq)]
+    base_datacube_shape = (np.sum(seq_lens), *subims_mode0.shape[1:])
     base_images = base_image_mean + np.random.randn(*base_datacube_shape)
     # and coefficients for each mode
-    coefs = [draw_coefs() for _ in range(base_images.shape[0])]
+    coefs = [draw_coefs() for _ in range(base_datacube_shape[0])]
     # recombine to create observed data
-    fringed_images = np.array([im + c1*m1 + c2*m2 for im, m1, m2, (c1, c2) in zip(
-                               base_images, subims_mode0, subims_mode1, coefs)])
+    fringed_images = base_images.copy()
+    seq_begin_idx = 0
+    for seq_len, m0, m1 in zip(seq_lens, sel_mode0, sel_mode1):
+        fringed_images[seq_begin_idx:seq_begin_idx + seq_len] += np.array([
+                                     c0*m0 + c1*m1 for c0, c1 in coefs[seq_begin_idx:seq_begin_idx + seq_len]
+                                                                           ])
+        seq_begin_idx += seq_len
     # generate masks
     masks = np.array([simple_mask(im) for im in fringed_images])
     return base_images, fringed_images, masks

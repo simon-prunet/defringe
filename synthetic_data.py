@@ -173,12 +173,12 @@ def generate_synth_data(path_to_modes='./', seed=11,
     coefs = [draw_coefs() for _ in range(base_datacube_shape[0])]
     # recombine to create observed data
     fringed_images = base_images.copy()
-    seq_begin_idx = 0
+    seq_begin_idx = [0]
     for seq_len, m0, m1 in zip(seq_lens, sel_mode0, sel_mode1):
-        fringed_images[seq_begin_idx:seq_begin_idx + seq_len] += np.array([
-                                     c0*m0 + c1*m1 for c0, c1 in coefs[seq_begin_idx:seq_begin_idx + seq_len]
-                                                                           ])
-        seq_begin_idx += seq_len
+        seq_start = seq_begin_idx[-1]
+        seq_end = seq_start + seq_len
+        fringed_images[seq_start:seq_end] += np.array([c0*m0 + c1*m1 for c0, c1 in coefs[seq_start:seq_end]])
+        seq_begin_idx.append(seq_end)
     # generate masks
     masks = np.array([simple_mask(im) for im in fringed_images])
-    return base_images, fringed_images, masks
+    return base_images, fringed_images, masks, seq_begin_idx

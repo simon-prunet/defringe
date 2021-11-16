@@ -10,6 +10,8 @@ except:
 from images import data
 import randlin
 
+import synthetic_data as sd
+
 def fringes(images,masks,tol=1e-10,rank=None,unshrinking=True,sigmas=None,lfac=1.0,random=None):
   ''' Starts from a collection of images and masks, 
       computes the target regularization parameter lambda~\sqrt(npix)\sigma
@@ -181,5 +183,28 @@ def regress_lsingular(images, masks, U, niter = 1, rank=None):
       coeff = cp.dot( cp.linalg.inv(BTB),RHS )
       Znew[:, i] = cp.dot(UU, coeff)
   return (Znew)
+
+###################################################
+# Generate synthetic data and run defringing code #
+###################################################
+
+def generate_and_process(path_to_modes='./',base_image_mean=0, seed=11, rank=4, unshrinking=True, tol=1e-12, random=None):
+
+  base_images, fringed_images, masks, _ = sd.generate_synth_data(path_to_modes=path_to_modes,
+                                                                 base_image_mean=base_image_mean,
+                                                                 n_seq=1, seed=seed)
+  nobs=base_images.shape[0]
+  npixlin=base_images.shape[1]
+  npix = npixlin**2
+
+  base_images = cp.transpose(cp.reshape(base_images,(nobs,npix)))
+  fringed_images = cp.transpose(cp.reshape(fringed_images,(nobs,npix)))
+  masks = cp.transpose(cp.reshape(masks,(nobs,npix)))
+  masks = 1.0 - masks # Invert convention, so that zeros inside masked pixels
+  sigmas = cp.ones(nobs)
+  Z = fringes(fringed_images,masks,rank=rank,tol=tol,sigmas=sigmas,unshrinking=unshrinking,random=random)
+
+  return (fringed_images, Z, masks)
+
 
 

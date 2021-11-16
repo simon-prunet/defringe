@@ -24,7 +24,7 @@ def gpu_random_svd(X_gpu,k,s,q=0):
   if (l>n) : l=n
 
   # Generate random sampling matrix O, uniform distribution between -1 and 1
-  O_gpu = cp.random.uniform(low=-1.0,high=1.0,size=(n,l),dtype=X_gpu.dtype)
+  O_gpu = cp.random.uniform(low=-1.0,high=1.0,size=(n,l)).astype(X_gpu.dtype)
   # Build sample matrix Y = X.O
   # Y approximates the range of X
   Y_gpu = cp.dot(X_gpu,O_gpu)
@@ -43,6 +43,23 @@ def gpu_random_svd(X_gpu,k,s,q=0):
 
   U_gpu = cp.dot(Q_gpu,M_gpu)
   return (U_gpu,D_gpu,VT_gpu)
+
+def eig_svd(X):
+  '''
+  Computes SVD using eigendecomposition of X^T.X
+  Assumes X is tall
+  '''
+
+  if (GPU and not isinstance(X,cp.ndarray)):
+    print ("Input array must be a cupy.ndarray")
+    return
+  B = cp.dot(X.T,X)
+  d,V = cp.linalg.eig(B)
+  sqrtd = cp.sqrt(d)
+  S = cp.diag(sqrtd)
+  Sm1 = cp.diag(1./sqrtd)
+  U = cp.dot(X,cp.dot(V,Sm1))
+  return (U,S,V.T)
 
 
 

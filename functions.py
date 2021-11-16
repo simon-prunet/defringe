@@ -43,8 +43,10 @@ def fringes(images,masks,tol=1e-10,rank=None,unshrinking=True,sigmas=None,lfac=1
   print ('Computing low-rank solution, with regularization lambda = %.2f'%lamb)
   # Warm start, to speed up convergence. This is the SOFT-INPUTE STEP
   print ('First iterations with lambda*10 (warm start)...')
+  # Z = fp_iterative(scaled_images,masks,lamb*10.,tol=tol,random=random): to be tested !
   Z = svd_iterate(scaled_images,masks,lamb*10.,tol=tol,random=random)
   print ('Second iterations with target lambda...')
+  # Z = fp_iterative(scaled_images,masks,lamb,Zold=Z,tol=tol,random=random): to be tested !
   Z = svd_iterate(scaled_images,masks,lamb,Zold=Z,tol=tol,random=random) 
   # Now un-shrink via ML solution on current singular vectors, for a given rank
   U,D,VT = cp.linalg.svd(Z,full_matrices=False)
@@ -66,6 +68,28 @@ def fringes(images,masks,tol=1e-10,rank=None,unshrinking=True,sigmas=None,lfac=1
     #print ('Weights after unshrinking:')
     #print VT[:rank,:].T
   return Z * sigmas[None,:]
+
+###################################
+# Iterative fixed point algorithm #
+###################################
+def fp_iterative(X,masks,lam,tau=1.,Zold=None,tol=1e-5,random=None):
+
+  '''
+  Uses am simple iterative fixed point algorithm, alternating gradient descent on the chi2 term
+  and SVT.
+  '''
+  frac_err = 1e30
+  while (frac_err > tol):
+    # Chi2 gradient descent
+    Ztemp = Zold - tau*masks*(Zold-X)
+    # SVT
+    Znew = soft_svd(Ztemp,tau*lam)
+    frac_err = frob2(Znew-Zold)/frob2(Znew)
+    print ("fractional error = %g"%frac_err)
+    Zold=Znew
+
+  return (Znew)
+
 
 def svd_iterate(X,masks,lam=1.,Zold=None,tol=1e-5,trunc=None,hard=False,rank=None,verbose=False,random=None):
 

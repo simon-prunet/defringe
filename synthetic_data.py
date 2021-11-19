@@ -3,7 +3,7 @@
 import numpy as np
 from astropy.io import fits
 
-def generate_subimages(im, sub_im_size=(75,75), stride=(10, 10),
+def generate_subimages(im, sub_im_size=(80,80), stride=(10, 10),
                        syms=True, axial_sym=True, diag_sym=True, rots=True):
     """Generate small, possibly overlapping subimages from one larger image.
 

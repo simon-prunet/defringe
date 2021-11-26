@@ -158,15 +158,19 @@ def denoising_unet_2D(img_size, start_neurons=16,dropout=0.25):
 
 
 
-def test_denoise_2D(start_neurons=16,dropout=0.,learning_rate=5e-4,epochs=30):
+def test_denoise_2D(start_neurons=16,dropout=0.,learning_rate=5e-4,epochs=30,seed=11,noise_seed=121):
 
   '''
   Small driver routine to train and test u-net
   '''
   # Generate data set, add noise, split in train/test sets
   from synthetic_data import generate_synth_data
-  bim,fim,msk,seqind = generate_synth_data()
+  def single_seq_len():
+    return 48
+
+  bim,fim,msk,seqind = generate_synth_data(seq_len=single_seq_len,seed=seed)
   truth = fim-bim
+  np.random.seed(noise_seed)
   noisy = truth + 10.*np.random.randn(*truth.shape)
   truth = np.reshape(truth,truth.shape+(1,))
   noisy = np.reshape(noisy,noisy.shape+(1,))
@@ -179,7 +183,7 @@ def test_denoise_2D(start_neurons=16,dropout=0.,learning_rate=5e-4,epochs=30):
   res = m.predict(noisy_val)
   return truth_val, noisy_val, res, h
 
-def test_denoise_3D(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30):
+def test_denoise_3D(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,seed=11,noise_seed=121):
 
   '''
   Small driver routine to train and test 3D u-net.
@@ -189,8 +193,9 @@ def test_denoise_3D(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30):
   from synthetic_data import generate_synth_data
   def single_seq_len():
     return 48
-  bim,fim,msk,seqind = generate_synth_data(seq_len=single_seq_len)
+  bim,fim,msk,seqind = generate_synth_data(seq_len=single_seq_len,seed=seed)
   truth = fim-bim
+  np.random.seed(noise_seed)
   noisy = truth + 10.*np.random.randn(*truth.shape)
   # Split first axes (observations) into sequences, move image index within given sequence in last position, 
   # and finally grow to add channel dimension last
@@ -208,59 +213,7 @@ def test_denoise_3D(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30):
   return truth_val, noisy_val, res, h
 
 
-### Create special layer for chi2 gradient term ###
 
-class gradient_step(layers.Layer):
-
-  '''
-    This special layer implements a simple gradient step for the chi2 term
-  '''
-  def __init__(self,data_matrix,mask,tau):
-    super(gradient_step,self).__init__()
-    if (mask.shape != data_matrix.shape):
-      print("Mask and data shape are incompatible")
-      return
-
-    # Make sure we only deal with tf tensors 
-    if (not isinstance(data_matrix,tf.Tensor)):
-      self.data_matrix = tf.constant(data_matrix_in)
-    else:
-      self.data_matrix = data_matrix_in
-    if (np.ndim(self.data_matrix)==2):
-      self.data_matrix_is_flat = True
-
-    if (not isinstance(mask,tf.Tensor)):
-      self.mask = tf.constant(mask)
-    else:
-      self.mask = mask
-
-    def build(self,input_shape):
-      '''
-        Here use build routine to check compatibility of input shape with mask/data_matrix shape
-      '''
-      nx,ny = input_shape[1:3]
-      if (self.data_matrix_is_flat):
-        if (self.data_matrix.shape[0] != nx*ny):
-          print("Number of pixels in data matrix and inputs are incompatible")
-          return
-        # Set data_matrix and mask in [nx,ny,nobs] shape
-        self.data_matrix = tf.reshape(self.data_matrix,input_shape[1:])
-        self.mask        = tf.reshape(self.mask,      ,input_shape[1:])
-      else:
-        # data_matrix, mask already in [nx,ny,nobs] shape
-        if (self.data_matrix.shape[0:2] != (nx,ny)):
-          print ("Spatial dimensions of data matrix and inputs are incompatible")
-          return
-
-    def call(self,inputs):
-
-      '''
-        returns X - tau*mask*(X-D)
-        where X is the input of dimensions [None, nx, ny, nobs, 1]
-      '''
-      # inputs has one more axis compared to mask and data_matrix, but tf is clever
-      res = inputs - tau * self.mask * (inputs - self.data_matrix)
-      return res
 
 
 

@@ -250,7 +250,7 @@ class gradient_step(layers.Layer):
           return
         # Set data_matrix and mask in [nx,ny,nobs] shape
         self.data_matrix = tf.reshape(self.data_matrix,input_shape[1:])
-        self.mask        = tf.reshape(self.mask,      ,input_shape[1:])
+        self.mask        = tf.reshape(self.mask       ,input_shape[1:])
       else:
         # data_matrix, mask already in [nx,ny,nobs] shape
         if (self.data_matrix.shape[0:2] != (nx,ny)):

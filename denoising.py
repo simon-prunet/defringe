@@ -24,6 +24,7 @@ from tensorflow.keras.layers import MaxPooling3D
 
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam 
+import tensorflow as tf
 
 
 def denoising_unet_3D_layers(inputs, start_neurons=8, dropout=0.25):
@@ -251,9 +252,9 @@ class gradient_step(layers.Layer):
 
     # Make sure we only deal with tf tensors 
     if (not isinstance(data_matrix,tf.Tensor)):
-      self.data_matrix = tf.constant(data_matrix_in)
+      self.data_matrix = tf.constant(data_matrix)
     else:
-      self.data_matrix = data_matrix_in
+      self.data_matrix = data_matrix
     if (np.ndim(self.data_matrix)==2):
       self.data_matrix_is_flat = True
 
@@ -291,7 +292,27 @@ class gradient_step(layers.Layer):
       return res
 
 
+def unrolled_fixpoint_unet_3D_model(data_matrices,masks, tau=0.5, start_neurons=8,dropout=0.25, niter=10):
+  '''
+    "Stacked" network obtained by feeding a 3D U-Net's output to another 3D U-Net.
+  '''
 
+  img_size = data_matrices.shape[1:-1]
+  inputs = Input(shape=img_size+(1,))
+
+  # Define gradient layer
+  gradient_layer = gradient_step(data_matrices,masks,tau)
+  uconv = denoising_unet_3D_layers(inputs, start_neurons=start_neurons, dropout=dropout)
+
+  for i in range(niter):
+    uconv = gradient_layer(uconv)
+    uconv = denoising_unet_3D_layers(uconv, start_neurons=start_neurons, dropout=dropout)
+
+  outputs = Conv3D(1, (1,1,1), padding='same')(uconv)
+
+  # Define model
+  model = Model(inputs,outputs)
+  return (model)
 
 
 

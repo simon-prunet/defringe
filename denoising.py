@@ -26,12 +26,10 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam 
 
 
-def denoising_unet_3D(img_size, start_neurons=8,dropout=0.25):
+def denoising_unet_3D_layers(inputs, start_neurons=8, dropout=0.25):
   '''
-    3D U-Net denoiser
+    Layers for a 3D U-Net denoiser
   '''
-
-  inputs = Input(shape=img_size+(1,))
   ### Encoder ###
   conv1 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(inputs)
   conv1 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(conv1)
@@ -83,8 +81,33 @@ def denoising_unet_3D(img_size, start_neurons=8,dropout=0.25):
   uconv1 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(uconv1)
   uconv1 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(uconv1)
   uconv1 = Dropout(dropout)(uconv1)
+  return uconv1
+
+def denoising_unet_3D_model(img_size, start_neurons=8, dropout=0.25):
+  '''
+    3D U-Net denoiser
+  '''
+  inputs = Input(shape=img_size+(1,))
+
+  uconv1 = denoising_unet_3D_layers(inputs, start_neurons=start_neurons, dropout=dropout)
 
   outputs = Conv3D(1, (1,1,1), padding='same')(uconv1)
+
+  # Define model
+  model = Model(inputs,outputs)
+  return (model)
+
+def stacked_denoising_unet_3D_model(img_size, start_neurons=8,dropout=0.25):
+  '''
+    "Stacked" network obtained by feeding a 3D U-Net's output to another 3D U-Net.
+  '''
+
+  inputs = Input(shape=img_size+(1,))
+
+  uconv1 = denoising_unet_3D_layers(inputs, start_neurons=start_neurons, dropout=dropout)
+  uconv2 = denoising_unet_3D_layers(uconv1, start_neurons=start_neurons, dropout=dropout)
+
+  outputs = Conv3D(1, (1,1,1), padding='same')(uconv2)
 
   # Define model
   model = Model(inputs,outputs)
@@ -206,7 +229,7 @@ def test_denoise_3D(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,seed
   from sklearn.model_selection import train_test_split
   noisy_train, noisy_val, truth_train, truth_val = train_test_split(noisy, truth,test_size=0.2)
   opt = Adam(learning_rate=learning_rate)
-  m = denoising_unet_3D((80,80,48),start_neurons=start_neurons,dropout=dropout)
+  m = denoising_unet_3D_model((80,80,48),start_neurons=start_neurons,dropout=dropout)
   m.compile(loss="mean_absolute_error",optimizer=opt)
   h = m.fit(noisy_train,truth_train,batch_size=5,epochs=epochs,validation_data=(noisy_val,truth_val))
   res = m.predict(noisy_val)

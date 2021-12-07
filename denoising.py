@@ -314,7 +314,32 @@ def unrolled_fixpoint_unet_3D_model(data_matrices,masks, tau=0.5, start_neurons=
   model = Model(inputs,outputs)
   return (model)
 
+def test_unroll(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,seed=11,noise_seed=121):
+  '''
+    Train unrolled network
+  '''
+  # Generate data set, reshape, add noise, split
+  from synthetic_data import generate_synth_data
+  def single_seq_len():
+    return 48
+  bim,fim,msk,seqind = generate_synth_data(seq_len=single_seq_len,seed=seed)
+  truth = fim-bim
+  np.random.seed(noise_seed)
+  noisy = truth + 10.*np.random.randn(*truth.shape)
+  # Split first axes (observations) into sequences, move image index within given sequence in last position, 
+  # and finally grow to add channel dimension last
 
+  truth = np.expand_dims(np.moveaxis(np.reshape(truth,(truth.shape[0]//48,48,truth.shape[1],truth.shape[2])),1,-1),-1)
+  noisy = np.expand_dims(np.moveaxis(np.reshape(noisy,(noisy.shape[0]//48,48,noisy.shape[1],noisy.shape[2])),1,-1),-1)
+
+  from sklearn.model_selection import train_test_split
+  noisy_train, noisy_val, truth_train, truth_val = train_test_split(noisy, truth,test_size=0.2)
+  opt = Adam(learning_rate=learning_rate)
+  m = unrolled_fixpoint_unet_3D_model(noisy,msk, tau=0.5, start_neurons=start_neurons,dropout=dropout, niter=10)
+  m.compile(loss="mean_absolute_error",optimizer=opt)
+  h = m.fit(noisy_train,truth_train,batch_size=5,epochs=epochs,validation_data=(noisy_val,truth_val))
+  res = m.predict(noisy_val)
+  return truth_val, noisy_val, res, h
 
 
         

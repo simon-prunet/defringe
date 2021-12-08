@@ -246,40 +246,31 @@ class gradient_step(layers.Layer):
   '''
   def __init__(self,data_matrix,mask,tau):
     super(gradient_step,self).__init__()
-    if (mask.shape != data_matrix.shape):
+    #print(data_matrix.shape,mask.shape, (mask.shape != data_matrix.shape))
+    if (mask.shape[1:] != data_matrix.shape[1:]):
       print("Mask and data shape are incompatible")
       return
-
+    self.data_matrix = data_matrix
     # Make sure we only deal with tf tensors 
-    if (not isinstance(data_matrix,tf.Tensor)):
-      self.data_matrix = tf.constant(data_matrix)
-    else:
-      self.data_matrix = data_matrix
-    if (np.ndim(self.data_matrix)==2):
-      self.data_matrix_is_flat = True
+    #if (not isinstance(data_matrix,tf.Tensor)):
+    #  self.data_matrix = tf.constant(data_matrix)
+    #else:
+    #  self.data_matrix = data_matrix
+    #if (np.ndim(self.data_matrix)==2):
+    #  self.data_matrix_is_flat = True
 
-    if (not isinstance(mask,tf.Tensor)):
-      self.mask = tf.constant(mask)
-    else:
-      self.mask = mask
+    #if (not isinstance(mask,tf.Tensor)):
+    #  self.mask = tf.constant(mask)
+    #else:
+    #  self.mask = mask
 
     def build(self,input_shape):
       '''
         Here use build routine to check compatibility of input shape with mask/data_matrix shape
       '''
-      nx,ny = input_shape[1:3]
-      if (self.data_matrix_is_flat):
-        if (self.data_matrix.shape[0] != nx*ny):
-          print("Number of pixels in data matrix and inputs are incompatible")
-          return
-        # Set data_matrix and mask in [nx,ny,nobs] shape
-        self.data_matrix = tf.reshape(self.data_matrix,input_shape[1:])
-        self.mask        = tf.reshape(self.mask       ,input_shape[1:])
-      else:
-        # data_matrix, mask already in [nx,ny,nobs] shape
-        if (self.data_matrix.shape[0:2] != (nx,ny)):
-          print ("Spatial dimensions of data matrix and inputs are incompatible")
-          return
+      if (self.data_matrix.shape[1:] != input_shape[1:]):
+        print("Shapes of data matrix and inputs are incompatible")
+        return
 
     def call(self,inputs):
 
@@ -299,22 +290,23 @@ def unrolled_fixpoint_unet_3D_model(data_matrices,masks, tau=0.5, start_neurons=
 
   img_size = data_matrices.shape[1:-1]
   inputs = Input(shape=img_size+(1,))
+  msk_inputs = Input(shape=img_size+(1,))
 
   # Define gradient layer
-  gradient_layer = gradient_step(data_matrices,masks,tau)
+  #gradient_layer = gradient_step(inputs,msk_inputs,tau)
   uconv = denoising_unet_3D_layers(inputs, start_neurons=start_neurons, dropout=dropout)
 
   for i in range(niter):
-    uconv = gradient_layer(uconv)
+    #uconv = gradient_layer(uconv)
     uconv = denoising_unet_3D_layers(uconv, start_neurons=start_neurons, dropout=dropout)
 
   outputs = Conv3D(1, (1,1,1), padding='same')(uconv)
 
   # Define model
-  model = Model(inputs,outputs)
+  model = Model([inputs,msk_inputs],outputs)
   return (model)
 
-def test_unroll(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,seed=11,noise_seed=121):
+def test_unroll(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,niter=10,seed=11,noise_seed=121):
   '''
     Train unrolled network
   '''
@@ -331,15 +323,16 @@ def test_unroll(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,seed=11,
 
   truth = np.expand_dims(np.moveaxis(np.reshape(truth,(truth.shape[0]//48,48,truth.shape[1],truth.shape[2])),1,-1),-1)
   noisy = np.expand_dims(np.moveaxis(np.reshape(noisy,(noisy.shape[0]//48,48,noisy.shape[1],noisy.shape[2])),1,-1),-1)
+  msk   = np.expand_dims(np.moveaxis(np.reshape(msk,  (msk.shape[0]//48  ,48,msk.shape[1]  ,msk.shape[2]))  ,1,-1),-1)
 
   from sklearn.model_selection import train_test_split
-  noisy_train, noisy_val, truth_train, truth_val = train_test_split(noisy, truth,test_size=0.2)
+  noisy_train, noisy_val, truth_train, truth_val, msk_train, msk_val = train_test_split(noisy, truth, msk, test_size=0.2)
   opt = Adam(learning_rate=learning_rate)
-  m = unrolled_fixpoint_unet_3D_model(noisy,msk, tau=0.5, start_neurons=start_neurons,dropout=dropout, niter=10)
+  m = unrolled_fixpoint_unet_3D_model(noisy,msk, tau=0.5, start_neurons=start_neurons,dropout=dropout, niter=niter)
   m.compile(loss="mean_absolute_error",optimizer=opt)
-  h = m.fit(noisy_train,truth_train,batch_size=5,epochs=epochs,validation_data=(noisy_val,truth_val))
-  res = m.predict(noisy_val)
-  return truth_val, noisy_val, res, h
+  h = m.fit([noisy_train,msk_train],truth_train,batch_size=5,epochs=epochs,validation_data=([noisy_val,msk_val],truth_val))
+  res = m.predict([noisy_val,msk_val])
+  return truth_val, noisy_val, msk_val, res, h
 
 
         

@@ -293,11 +293,11 @@ def unrolled_fixpoint_unet_3D_model(data_matrices,masks, tau=0.5, start_neurons=
   msk_inputs = Input(shape=img_size+(1,))
 
   # Define gradient layer
-  #gradient_layer = gradient_step(inputs,msk_inputs,tau)
+  gradient_layer = gradient_step(inputs,msk_inputs,tau)
   uconv = denoising_unet_3D_layers(inputs, start_neurons=start_neurons, dropout=dropout)
 
   for i in range(niter):
-    #uconv = gradient_layer(uconv)
+    uconv = gradient_layer(uconv)
     uconv = denoising_unet_3D_layers(uconv, start_neurons=start_neurons, dropout=dropout)
 
   outputs = Conv3D(1, (1,1,1), padding='same')(uconv)
@@ -315,9 +315,14 @@ def test_unroll(start_neurons=8,dropout=0.,learning_rate=5e-4,epochs=30,niter=10
   def single_seq_len():
     return 48
   bim,fim,msk,seqind = generate_synth_data(seq_len=single_seq_len,seed=seed)
+  # Reverse masks. We need zero where mask is active
+  msk = 1.0-msk
   truth = fim-bim
   np.random.seed(noise_seed)
   noisy = truth + 10.*np.random.randn(*truth.shape)
+
+  # Apply mask to noisy data
+  noisy *= msk
   # Split first axes (observations) into sequences, move image index within given sequence in last position, 
   # and finally grow to add channel dimension last
 

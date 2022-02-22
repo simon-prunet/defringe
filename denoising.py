@@ -21,10 +21,86 @@ from tensorflow.keras.layers import UpSampling2D
 from tensorflow.keras.layers import Conv3D
 from tensorflow.keras.layers import Conv3DTranspose
 from tensorflow.keras.layers import MaxPooling3D
+from tensorflow.keras.layers import Flatten
+from tensorflow.keras.layers import Reshape
 
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam 
 import tensorflow as tf
+
+def IRMAE_3D_layers(inputs, start_neurons=8, dropout=0.25, n_linear=10):
+  '''
+    Layers for an implicit rank-minimizing autoencoder
+  ''' 
+  ### Encoder ###
+  conv1 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(inputs)
+  conv1 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(conv1)
+  pool1 = MaxPooling3D((2,2,2))(conv1)
+  pool1 = Dropout(dropout)(pool1)
+
+  conv2 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(pool1)
+  conv2 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(conv2)
+  pool2 = MaxPooling3D((2,2,2))(conv2)
+  pool2 = Dropout(dropout)(pool2)
+
+  conv3 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(pool2)
+  conv3 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(conv3)
+  pool3 = MaxPooling3D((2,2,2))(conv3)
+  pool3 = Dropout(dropout)(pool3)
+
+  conv4 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(pool3)
+  conv4 = Conv3D(start_neurons*1,(3,3,3), activation = 'relu', padding='same')(conv4)
+  pool4 = MaxPooling3D((2,2,2))(conv4)
+  pool4 = Dropout(dropout)(pool4)
+
+  ### Middle ###
+  # Flatten, apply a given number of *linear* dense layers, and reshape
+  ###############
+  # Keep track of shape before flattening
+  sh = pool4.shape[1:]
+  flat = Flatten()(pool4)
+  for i in range(n_linear):
+    # Linear dense networks, i.e. general square matrix. This is the heart of the IRMAE 
+    flat = Dense(flat.shape[1],use_bias=None)(flat)
+
+  # Get back in shape !
+  nonflat = Reshape(sh)(flat)
+  deconv4 = Conv3DTranspose(start_neurons*1,(3,3,3), strides=(2,2,2), padding='same')(nonflat)
+  deconv4 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv4)
+  deconv4 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv4)
+  deconv4 = Dropout(dropout)(deconv4)
+
+  deconv3 = Conv3DTranspose(start_neurons*1,(3,3,3), strides=(2,2,2), padding='same')(deconv4)
+  deconv3 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv3)
+  deconv3 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv3)
+  deconv3 = Dropout(dropout)(deconv3)
+
+  deconv2 = Conv3DTranspose(start_neurons*1,(3,3,3), strides=(2,2,2), padding='same')(deconv3)
+  deconv2 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv2)
+  deconv2 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv2)
+  deconv2 = Dropout(dropout)(deconv2)
+
+  deconv1 = Conv3DTranspose(start_neurons*1,(3,3,3), strides=(2,2,2), padding='same')(deconv2)
+  deconv1 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv1)
+  deconv1 = Conv3D(start_neurons*1, (3,3,3), activation='relu', padding='same')(deconv1)
+  deconv1 = Dropout(dropout)(deconv1)
+
+  return deconv1
+
+
+def IRMAE_3D_model(img_size, start_neurons=8, dropout=0.25, n_linear=10):
+  '''
+    3D low-rank implicit regularization autoencoder
+  '''
+  inputs = Input(shape=img_size+(1,))
+
+  conv = IRMAE_3D_layers(inputs, start_neurons=start_neurons, dropout=dropout, n_linear=n_linear)
+
+  outputs = Conv3D(1, (1,1,1), padding='same')(conv)
+
+  # Define model
+  model = Model(inputs,outputs)
+  return (model)
 
 
 def denoising_unet_3D_layers(inputs, start_neurons=8, dropout=0.25):
